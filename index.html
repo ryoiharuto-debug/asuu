@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel RPG Adventure</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            background: #1a1a2e;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 4/3;
+            background: #0f0f1e;
+            image-rendering: pixelated;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            display: block;
+        }
+
+        /* UI Overlay */
+        #uiLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* Virtual Controls */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            pointer-events: auto;
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+        }
+
+        .dpad {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 5px;
+        }
+
+        .btn {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.1s;
+            backdrop-filter: blur(5px);
+        }
+
+        .btn:active, .btn.active {
+            background: rgba(255,255,255,0.4);
+            transform: scale(0.95);
+        }
+
+        .btn.up { grid-column: 2; grid-row: 1; }
+        .btn.left { grid-column: 1; grid-row: 2; }
+        .btn.right { grid-column: 3; grid-row: 2; }
+        .btn.down { grid-column: 2; grid-row: 3; }
+        .btn.center { grid-column: 2; grid-row: 2; background: rgba(255,255,255,0.1); }
+
+        .action-btns {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .action-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .action-btn.attack { background: rgba(231, 76, 60, 0.6); border-color: #e74c3c; }
+        .action-btn.interact { background: rgba(46, 204, 113, 0.6); border-color: #2ecc71; }
+        .action-btn.menu { background: rgba(52, 152, 219, 0.6); border-color: #3498db; }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: auto;
+        }
+
+        .hud-panel {
+            background: rgba(0,0,0,0.7);
+            border: 2px solid #4a4a6a;
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: white;
+            font-size: 12px;
+            min-width: 120px;
+        }
+
+        .stat-bar {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin: 3px 0;
+        }
+
+        .bar {
+            width: 80px;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+
+        .hp-fill { background: #e74c3c; }
+        .mp-fill { background: #3498db; }
+        .exp-fill { background: #f39c12; }
+
+        .gold-display {
+            color: #f1c40f;
+            font-weight: bold;
+        }
+
+        /* Menu Screens */
+        .menu-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            color: white;
+            pointer-events: auto;
+            overflow-y: auto;
+            z-index: 200;
+        }
+
+        .menu-screen.active {
+            display: flex;
+        }
+
+        .menu-header {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #f1c40f;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .menu-item {
+            background: #2c3e50;
+            border: 2px solid #34495e;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .menu-item:hover {
+            background: #34495e;
+            border-color: #3498db;
+            transform: translateY(-2px);
+        }
+
+        .menu-item .icon {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+
+        .item-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .list-item {
+            background: #2c3e50;
+            border: 1px solid #34495e;
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .list-item:hover {
+            background: #34495e;
+        }
+
+        .item-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .item-name {
+            font-weight: bold;
+            color: #ecf0f1;
+        }
+
+        .item-desc {
+            font-size: 10px;
+            color: #95a5a6;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 40px;
+            height: 40px;
+            background: #e74c3c;
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 201;
+        }
+
+        /* Dialog Box */
+        #dialogBox {
+            position: absolute;
+            bottom: 150px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 600px;
+            background: rgba(0,0,0,0.95);
+            border: 3px solid #f1c40f;
+            border-radius: 10px;
+            padding: 20px;
+            color: white;
+            display: none;
+            pointer-events: auto;
+            z-index: 150;
+        }
+
+        #dialogBox.active {
+            display: block;
+        }
+
+        .dialog-speaker {
+            color: #f1c40f;
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .dialog-text {
+            font-size: 16px;
+            line-height: 1.5;
+            min-height: 60px;
+        }
+
+        .dialog-options {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .dialog-option {
+            background: #2c3e50;
+            border: 1px solid #3498db;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dialog-option:hover {
+            background: #3498db;
+        }
+
+        /* Battle Screen */
+        #battleScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #2c3e50, #000);
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            pointer-events: auto;
+            z-index: 300;
+        }
+
+        #battleScreen.active {
+            display: flex;
+        }
+
+        .battle-arena {
+            flex: 1;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            position: relative;
+        }
+
+        .combatant {
+            text-align: center;
+        }
+
+        .combatant-sprite {
+            width: 80px;
+            height: 80px;
+            background: #34495e;
+            border: 3px solid #ecf0f1;
+            border-radius: 10px;
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            position: relative;
+        }
+
+        .combatant.enemy .combatant-sprite {
+            border-color: #e74c3c;
+        }
+
+        .combatant.player .combatant-sprite {
+            border-color: #2ecc71;
+        }
+
+        .damage-popup {
+            position: absolute;
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 20px;
+            animation: floatUp 1s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes floatUp {
+            to {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+        }
+
+        .battle-controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .battle-btn {
+            padding: 15px;
+            background: #34495e;
+            border: 2px solid #ecf0f1;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .battle-btn:hover {
+            background: #ecf0f1;
+            color: #2c3e50;
+        }
+
+        /* Notification */
+        #notification {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(46, 204, 113, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            display: none;
+            z-index: 400;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateX(-50%) translateY(-20px);
+                opacity: 0;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .dpad {
+                grid-template-columns: repeat(3, 50px);
+                grid-template-rows: repeat(3, 50px);
+            }
+            
+            .action-btn {
+                width: 60px;
+                height: 60px;
+                font-size: 12px;
+            }
+            
+            #controls {
+                bottom: 10px;
+                left: 10px;
+                gap: 10px;
+            }
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a2e; 
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4a4a6a; 
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6a6a8a; 
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- HUD -->
+        <div id="hud">
+            <div class="hud-panel">
+                <div class="stat-bar">
+                    <span>HP</span>
+                    <div class="bar">
+                        <div class="bar-fill hp-fill" id="hpBar" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div class="stat-bar">
+                    <span>MP</span>
+                    <div class="bar">
+                        <div class="bar-fill mp-fill" id="mpBar" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div class="stat-bar">
+                    <span>EXP</span>
+                    <div class="bar">
+                        <div class="bar-fill exp-fill" id="expBar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div>Level: <span id="levelDisplay">1</span></div>
+            </div>
+            <div class="hud-panel">
+                <div class="gold-display">💰 <span id="goldDisplay">0</span></div>
+                <div style="margin-top: 5px; font-size: 10px;">📍 <span id="locationDisplay">Kota Awal</span></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls">
+            <div class="dpad">
+                <div class="btn up" data-dir="up">▲</div>
+                <div class="btn left" data-dir="left">◀</div>
+                <div class="btn center">●</div>
+                <div class="btn right" data-dir="right">▶</div>
+                <div class="btn down" data-dir="down">▼</div>
+            </div>
+            <div class="action-btns">
+                <div class="btn action-btn attack" id="attackBtn">⚔️</div>
+                <div class="btn action-btn interact" id="interactBtn">🗣️</div>
+                <div class="btn action-btn menu" id="menuBtn">📋</div>
+            </div>
+        </div>
+
+        <!-- Dialog Box -->
+        <div id="dialogBox">
+            <div class="dialog-speaker" id="dialogSpeaker">NPC</div>
+            <div class="dialog-text" id="dialogText">...</div>
+            <div class="dialog-options" id="dialogOptions"></div>
+        </div>
+
+        <!-- Battle Screen -->
+        <div id="battleScreen">
+            <h2 style="text-align: center; color: #e74c3c; margin-bottom: 20px;">⚔️ PERTARUNGAN!</h2>
+            <div class="battle-arena">
+                <div class="combatant player">
+                    <div class="combatant-sprite" id="playerSprite">🧙</div>
+                    <div>Anda (Lv.<span id="battlePlayerLevel">1</span>)</div>
+                    <div class="bar" style="width: 100px; margin: 5px auto;">
+                        <div class="bar-fill hp-fill" id="battlePlayerHP" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div style="font-size: 40px;">VS</div>
+                <div class="combatant enemy">
+                    <div class="combatant-sprite" id="enemySprite">👹</div>
+                    <div id="enemyName">Goblin</div>
+                    <div class="bar" style="width: 100px; margin: 5px auto;">
+                        <div class="bar-fill hp-fill" id="battleEnemyHP" style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="battle-controls">
+                <button class="battle-btn" onclick="game.battle.attack()">⚔️ Serang</button>
+                <button class="battle-btn" onclick="game.battle.skill()">✨ Skill</button>
+                <button class="battle-btn" onclick="game.battle.item()">🎒 Item</button>
+                <button class="battle-btn" onclick="game.battle.flee()">🏃 Kabur</button>
+            </div>
+        </div>
+
+        <!-- Main Menu -->
+        <div id="mainMenu" class="menu-screen">
+            <button class="close-btn" onclick="game.ui.closeMenu()">✕</button>
+            <div class="menu-header">📋 MENU UTAMA</div>
+            <div class="menu-grid">
+                <div class="menu-item" onclick="game.ui.showInventory()">
+                    <div class="icon">🎒</div>
+                    <div>Inventory</div>
+                </div>
+                <div class="menu-item" onclick="game.ui.showCrafting()">
+                    <div class="icon">⚒️</div>
+                    <div>Crafting</div>
+                </div>
+                <div class="menu-item" onclick="game.ui.showQuests()">
+                    <div class="icon">📜</div>
+                    <div>Quest</div>
+                </div>
+                <div class="menu-item" onclick="game.ui.showMap()">
+                    <div class="icon">🗺️</div>
+                    <div>Peta</div>
+                </div>
+                <div class="menu-item" onclick="game.save()">
+                    <div class="icon">💾</div>
+                    <div>Save Game</div>
+                </div>
+                <div class="menu-item" onclick="game.load()">
+                    <div class="icon">📂</div>
+                    <div>Load Game</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventory Menu -->
+        <div id="inventoryMenu" class="menu-screen">
+            <button class="close-btn" onclick="game.ui.closeSubMenu()">✕</button>
+            <div class="menu-header">🎒 INVENTORY</div>
+            <div id="inventoryList" class="item-list"></div>
+        </div>
+
+        <!-- Crafting Menu -->
+        <div id="craftingMenu" class="menu-screen">
+            <button class="close-btn" onclick="game.ui.closeSubMenu()">✕</button>
+            <div class="menu-header">⚒️ CRAFTING</div>
+            <div style="margin-bottom: 15px; color: #95a5a6;">Klik item untuk craft (butuh bahan yang cukup)</div>
+            <div id="craftingList" class="item-list"></div>
+        </div>
+
+        <!-- Quest Menu -->
+        <div id="questMenu" class="menu-screen">
+            <button class="close-btn" onclick="game.ui.closeSubMenu()">✕</button>
+            <div class="menu-header">📜 QUEST</div>
+            <div id="questList" class="item-list"></div>
+        </div>
+
+        <!-- Map Menu -->
+        <div id="mapMenu" class="menu-screen">
+            <button class="close-btn" onclick="game.ui.closeSubMenu()">✕</button>
+            <div class="menu-header">🗺️ PETA DUNIA</div>
+            <div id="mapList" class="item-list"></div>
+        </div>
+
+        <!-- Shop Menu -->
+        <div id="shopMenu" class="menu-screen">
+            <button class="close-btn" onclick="game.ui.closeSubMenu()">✕</button>
+            <div class="menu-header">🏪 TOKO</div>
+            <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+                <button class="battle-btn" onclick="game.ui.switchShopTab('buy')" style="flex: 1;">Beli</button>
+                <button class="battle-btn" onclick="game.ui.switchShopTab('sell')" style="flex: 1;">Jual</button>
+            </div>
+            <div id="shopList" class="item-list"></div>
+        </div>
+
+        <!-- Notification -->
+        <div id="notification"></div>
+    </div>
+
+    <script>
+        // Game Configuration
+        const CONFIG = {
+            TILE_SIZE: 32,
+            MAP_WIDTH: 25,
+            MAP_HEIGHT: 20,
+            COLORS: {
+                grass: '#2d5016',
+                water: '#1e3a5f',
+                tree: '#1b4d1b',
+                wall: '#4a4a4a',
+                floor: '#6b6b6b',
+                roof: '#8b4513',
+                sand: '#c2b280',
+                mountain: '#5a5a5a',
+                lava: '#cf1020'
+            }
+        };
+
+        // Game State
+        const state = {
+            player: {
+                x: 12,
+                y: 10,
+                level: 1,
+                hp: 100,
+                maxHp: 100,
+                mp: 50,
+                maxMp: 50,
+                exp: 0,
+                maxExp: 100,
+                gold: 100,
+                attack: 10,
+                defense: 5,
+                inventory: [
+                    { id: 'potion_hp', name: 'Potion HP', qty: 3, type: 'consumable', effect: { hp: 30 }, price: 50 },
+                    { id: 'potion_mp', name: 'Potion MP', qty: 2, type: 'consumable', effect: { mp: 20 }, price: 40 }
+                ],
+                equipment: {
+                    weapon: null,
+                    armor: null
+                }
+            },
+            currentMap: 'village1',
+            maps: {},
+            npcs: [],
+            monsters: [],
+            items: [],
+            quests: [
+                { id: 'q1', name: 'Hunting Goblin', desc: 'Kalahkan 3 Goblin di hutan', target: { type: 'kill', monster: 'goblin', count: 3 }, current: 0, completed: false, reward: { gold: 100, exp: 50 } },
+                { id: 'q2', name: 'Kumpulkan Kayu', desc: 'Kumpulkan 5 kayu dari hutan', target: { type: 'gather', item: 'wood', count: 5 }, current: 0, completed: false, reward: { gold: 50, exp: 30 } }
+            ],
+            flags: {},
+            inBattle: false,
+            currentEnemy: null
+        };
+
+        // Item Database
+        const ITEM_DB = {
+            wood: { name: 'Kayu', icon: '🪵', type: 'material', price: 10 },
+            stone: { name: 'Batu', icon: '🪨', type: 'material', price: 15 },
+            herb: { name: 'Herba', icon: '🌿', type: 'material', price: 20 },
+            iron: { name: 'Besi', icon: '⛓️', type: 'material', price: 50 },
+            potion_hp: { name: 'Potion HP', icon: '🍷', type: 'consumable', effect: { hp: 50 }, craft: { herb: 2, gold: 20 }, price: 50 },
+            potion_mp: { name: 'Potion MP', icon: '💧', type: 'consumable', effect: { mp: 30 }, craft: { herb: 1, stone: 1, gold: 20 }, price: 40 },
+            sword_iron: { name: 'Pedang Besi', icon: '⚔️', type: 'weapon', attack: 15, craft: { iron: 3, wood: 1, gold: 100 }, price: 200 },
+            armor_leather: { name: 'Armor Kulit', icon: '🛡️', type: 'armor', defense: 10, craft: { herb: 5, gold: 80 }, price: 150 }
+        };
+
+        // Monster Database
+        const MONSTER_DB = {
+            goblin: { name: 'Goblin', icon: '👺', hp: 30, attack: 8, defense: 2, exp: 20, gold: 15, drops: [{ item: 'herb', chance: 0.3 }, { item: 'wood', chance: 0.2 }] },
+            slime: { name: 'Slime', icon: '💚', hp: 20, attack: 5, defense: 1, exp: 10, gold: 8, drops: [{ item: 'herb', chance: 0.4 }] },
+            wolf: { name: 'Serigala', icon: '🐺', hp: 45, attack: 12, defense: 3, exp: 35, gold: 25, drops: [{ item: 'wood', chance: 0.3 }] },
+            orc: { name: 'Orc', icon: '👹', hp: 60, attack: 15, defense: 5, exp: 50, gold: 40, drops: [{ item: 'iron', chance: 0.2 }, { item: 'stone', chance: 0.3 }] },
+            dragon: { name: 'Naga', icon: '🐲', hp: 200, attack: 30, defense: 15, exp: 500, gold: 500, drops: [{ item: 'iron', chance: 0.8 }] }
+        };
+
+        // Map Definitions
+        const MAPS = {
+            village1: {
+                name: 'Kota Permulaan',
+                type: 'safe',
+                width: 25,
+                height: 20,
+                npcs: [
+                    { x: 10, y: 8, name: 'Elder', icon: '👴', dialog: 'Selamat datang! Kunjungi hutan untuk berlatih.', quest: 'q1' },
+                    { x: 15, y: 12, name: 'Shopkeeper', icon: '👨‍💼', shop: true },
+                    { x: 8, y: 15, name: 'Craftsman', icon: '👨‍🔧', craft: true }
+                ],
+                exits: [
+                    { x: 24, y: 10, target: 'forest1', targetX: 1, targetY: 10 },
+                    { x: 12, y: 19, target: 'dungeon1', targetX: 12, targetY: 1 }
+                ]
+            },
+            forest1: {
+                name: 'Hutan Gelap',
+                type: 'wild',
+                width: 30,
+                height: 25,
+                monsters: [{ type: 'goblin', chance: 0.3 }, { type: 'slime', chance: 0.4 }, { type: 'wolf', chance: 0.2 }],
+                resources: [{ type: 'wood', chance: 0.15 }, { type: 'herb', chance: 0.2 }],
+                exits: [
+                    { x: 0, y: 10, target: 'village1', targetX: 23, targetY: 10 },
+                    { x: 29, y: 15, target: 'village2', targetX: 1, targetY: 15 }
+                ]
+            },
+            village2: {
+                name: 'Kota Pedagang',
+                type: 'safe',
+                width: 25,
+                height: 20,
+                npcs: [
+                    { x: 12, y: 10, name: 'Mayor', icon: '👑', dialog: 'Kota ini kaya akan mineral. Hati-hati dengan goblin!' },
+                    { x: 18, y: 8, name: 'Blacksmith', icon: '⚒️', shop: true, special: 'weapon' }
+                ],
+                exits: [
+                    { x: 0, y: 15, target: 'forest1', targetX: 28, targetY: 15 },
+                    { x: 12, y: 0, target: 'mountain1', targetX: 12, targetY: 19 }
+                ]
+            },
+            mountain1: {
+                name: 'Pegunungan',
+                type: 'wild',
+                width: 25,
+                height: 25,
+                monsters: [{ type: 'orc', chance: 0.3 }, { type: 'wolf', chance: 0.3 }, { type: 'goblin', chance: 0.2 }],
+                resources: [{ type: 'stone', chance: 0.2 }, { type: 'iron', chance: 0.1 }],
+                exits: [
+                    { x: 12, y: 24, target: 'village2', targetX: 12, targetY: 1 },
+                    { x: 24, y: 12, target: 'dungeon1', targetX: 1, targetY: 12 }
+                ]
+            },
+            dungeon1: {
+                name: 'Dungeon Jahat',
+                type: 'dungeon',
+                width: 30,
+                height: 30,
+                monsters: [{ type: 'orc', chance: 0.4 }, { type: 'goblin', chance: 0.3 }, { type: 'dragon', chance: 0.05 }],
+                resources: [{ type: 'iron', chance: 0.15 }, { type: 'stone', chance: 0.2 }],
+                exits: [
+                    { x: 1, y: 12, target: 'mountain1', targetX: 23, targetY: 12 },
+                    { x: 15, y: 29, target: 'village1', targetX: 15, targetY: 1 }
+                ]
+            }
+        };
+
+        // Canvas Setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resize() {
+            const container = document.getElementById('gameContainer');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            ctx.imageSmoothingEnabled = false;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Input Handling
+        const input = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            action: false
+        };
+
+        // Touch Controls
+        document.querySelectorAll('.btn[data-dir]').forEach(btn => {
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                input[btn.dataset.dir] = true;
+                btn.classList.add('active');
+            });
+            
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                input[btn.dataset.dir] = false;
+                btn.classList.remove('active');
+            });
+            
+            btn.addEventListener('mousedown', () => {
+                input[btn.dataset.dir] = true;
+                btn.classList.add('active');
+            });
+            
+            btn.addEventListener('mouseup', () => {
+                input[btn.dataset.dir] = false;
+                btn.classList.remove('active');
+            });
+        });
+
+        document.getElementById('attackBtn').addEventListener('click', () => game.interact());
+        document.getElementById('interactBtn').addEventListener('click', () => game.talk());
+        document.getElementById('menuBtn').addEventListener('click', () => game.ui.showMenu());
+
+        // Keyboard Controls
+        window.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp': case 'w': input.up = true; break;
+                case 'ArrowDown': case 's': input.down = true; break;
+                case 'ArrowLeft': case 'a': input.left = true; break;
+                case 'ArrowRight': case 'd': input.right = true; break;
+                case ' ': case 'Enter': game.interact(); break;
+                case 'Escape': game.ui.closeMenu(); break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            switch(e.key) {
+                case 'ArrowUp': case 'w': input.up = false; break;
+                case 'ArrowDown': case 's': input.down = false; break;
+                case 'ArrowLeft': case 'a': input.left = false; break;
+                case 'ArrowRight': case 'd': input.right = false; break;
+            }
+        });
+
+        // Game Logic
+        const game = {
+            init() {
+                this.generateMap(state.currentMap);
+                this.loop();
+                this.ui.updateHUD();
+            },
+
+            generateMap(mapId) {
+                const mapDef = MAPS[mapId];
+                const map = [];
+                
+                // Generate terrain
+                for(let y = 0; y < mapDef.height; y++) {
+                    map[y] = [];
+                    for(let x = 0; x < mapDef.width; x++) {
+                        let tile = 'grass';
+                        
+                        if(mapDef.type === 'dungeon') {
+                            tile = (x === 0 || x === mapDef.width-1 || y === 0 || y === mapDef.height-1) ? 'wall' : 'floor';
+                            // Random walls in dungeon
+                            if(tile === 'floor' && Math.random() < 0.1) tile = 'wall';
+                        } else if(mapDef.type === 'mountain') {
+                            tile = Math.random() < 0.3 ? 'mountain' : 'grass';
+                        } else if(mapDef.type === 'wild') {
+                            tile = Math.random() < 0.2 ? 'tree' : 'grass';
+                            if(Math.random() < 0.05) tile = 'water';
+                        }
+                        
+                        map[y][x] = tile;
+                    }
+                }
+
+                // Add buildings in villages
+                if(mapDef.type === 'safe') {
+                    for(let i = 0; i < 5; i++) {
+                        const bx = 5 + Math.floor(Math.random() * (mapDef.width - 10));
+                        const by = 5 + Math.floor(Math.random() * (mapDef.height - 10));
+                        for(let dy = 0; dy < 3; dy++) {
+                            for(let dx = 0; dx < 3; dx++) {
+                                if(map[by+dy]) map[by+dy][bx+dx] = (dy === 0 && dx === 1) ? 'door' : 'wall';
+                            }
+                        }
+                    }
+                }
+
+                state.maps[mapId] = map;
+                state.npcs = mapDef.npcs || [];
+                state.monsters = [];
+                
+                // Spawn monsters in wild areas
+                if(mapDef.monsters) {
+                    for(let i = 0; i < 8; i++) {
+                        const x = 1 + Math.floor(Math.random() * (mapDef.width - 2));
+                        const y = 1 + Math.floor(Math.random() * (mapDef.height - 2));
+                        const rand = Math.random();
+                        let type = mapDef.monsters[0].type;
+                        let cumChance = 0;
+                        for(let m of mapDef.monsters) {
+                            cumChance += m.chance;
+                            if(rand < cumChance) {
+                                type = m.type;
+                                break;
+                            }
+                        }
+                        state.monsters.push({ x, y, type, hp: MONSTER_DB[type].hp, maxHp: MONSTER_DB[type].hp });
+                    }
+                }
+
+                // Spawn resources
+                state.items = [];
+                if(mapDef.resources) {
+                    for(let i = 0; i < 10; i++) {
+                        const x = 1 + Math.floor(Math.random() * (mapDef.width - 2));
+                        const y = 1 + Math.floor(Math.random() * (mapDef.height - 2));
+                        const rand = Math.random();
+                        for(let r of mapDef.resources) {
+                            if(rand < r.chance) {
+                                state.items.push({ x, y, type: r.type });
+                                break;
+                            }
+                        }
+                    }
+                }
+            },
+
+            move(dx, dy) {
+                if(state.inBattle) return;
+                
+                const newX = state.player.x + dx;
+                const newY = state.player.y + dy;
+                const map = state.maps[state.currentMap];
+                const mapDef = MAPS[state.currentMap];
+
+                // Check bounds
+                if(newX < 0 || newX >= mapDef.width || newY < 0 || newY >= mapDef.height) return;
+
+                // Check collisions
+                const tile = map[newY][newX];
+                if(tile === 'wall' || tile === 'water' || tile === 'mountain' || tile === 'tree') {
+                    return;
+                }
+
+                // Check NPCs
+                const npc = state.npcs.find(n => n.x === newX && n.y === newY);
+                if(npc) return;
+
+                // Check monsters
+                const monster = state.monsters.find(m => m.x === newX && m.y === newY);
+                if(monster) {
+                    this.startBattle(monster);
+                    return;
+                }
+
+                // Move player
+                state.player.x = newX;
+                state.player.y = newY;
+
+                // Check items
+                const itemIndex = state.items.findIndex(i => i.x === newX && i.y === newY);
+                if(itemIndex !== -1) {
+                    const item = state.items[itemIndex];
+                    this.giveItem(item.type, 1);
+                    state.items.splice(itemIndex, 1);
+                    this.ui.showNotification(`Dapat ${ITEM_DB[item.type].name}!`);
+                }
+
+                // Check exits
+                const exit = mapDef.exits?.find(e => e.x === newX && e.y === newY);
+                if(exit) {
+                    state.currentMap = exit.target;
+                    state.player.x = exit.targetX;
+                    state.player.y = exit.targetY;
+                    this.generateMap(state.currentMap);
+                    this.ui.updateHUD();
+                }
+
+                // Random encounter in wild
+                if(mapDef.type === 'wild' && Math.random() < 0.05) {
+                    const types = mapDef.monsters.map(m => m.type);
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    this.startBattle({ type, hp: MONSTER_DB[type].hp, maxHp: MONSTER_DB[type].hp });
+                }
+            },
+
+            interact() {
+                if(state.inBattle) return;
+                
+                const mapDef = MAPS[state.currentMap];
+                const npc = state.npcs.find(n => 
+                    Math.abs(n.x - state.player.x) <= 1 && 
+                    Math.abs(n.y - state.player.y) <= 1
+                );
+
+                if(npc) {
+                    if(npc.shop) {
+                        this.ui.showShop(npc.special);
+                    } else if(npc.craft) {
+                        this.ui.showCrafting();
+                    } else if(npc.dialog) {
+                        this.ui.showDialog(npc.name, npc.dialog, npc.quest ? [
+                            { text: 'Terima Quest', action: () => this.acceptQuest(npc.quest) },
+                            { text: 'Tutup', action: () => this.ui.closeDialog() }
+                        ] : [{ text: 'Tutup', action: () => this.ui.closeDialog() }]);
+                    }
+                }
+            },
+
+            talk() {
+                this.interact();
+            },
+
+            startBattle(monster) {
+                state.inBattle = true;
+                state.currentEnemy = { ...MONSTER_DB[monster.type], currentHp: monster.hp || MONSTER_DB[monster.type].hp };
+                document.getElementById('battleScreen').classList.add('active');
+                document.getElementById('enemyName').textContent = state.currentEnemy.name;
+                document.getElementById('enemySprite').textContent = state.currentEnemy.icon;
+                this.ui.updateBattleHUD();
+            },
+
+            battle: {
+                attack() {
+                    const enemy = state.currentEnemy;
+                    const player = state.player;
+                    
+                    // Player attack
+                    const damage = Math.max(1, player.attack + Math.floor(Math.random() * 5) - enemy.defense);
+                    enemy.currentHp -= damage;
+                    game.ui.showDamage(damage, 'enemy');
+                    
+                    if(enemy.currentHp <= 0) {
+                        this.win();
+                        return;
+                    }
+                    
+                    // Enemy turn
+                    setTimeout(() => this.enemyTurn(), 1000);
+                },
+
+                skill() {
+                    if(state.player.mp < 10) {
+                        game.ui.showNotification('MP tidak cukup!');
+                        return;
+                    }
+                    state.player.mp -= 10;
+                    const damage = Math.floor(state.player.attack * 1.5) + Math.floor(Math.random() * 10);
+                    state.currentEnemy.currentHp -= damage;
+                    game.ui.showDamage(damage + ' (Skill!)', 'enemy');
+                    
+                    if(state.currentEnemy.currentHp <= 0) {
+                        this.win();
+                        return;
+                    }
+                    setTimeout(() => this.enemyTurn(), 1000);
+                },
+
+                item() {
+                    game.ui.closeSubMenu();
+                    game.ui.showInventory(true);
+                },
+
+                useItemInBattle(item) {
+                    if(item.type === 'consumable') {
+                        if(item.effect.hp) state.player.hp = Math.min(state.player.maxHp, state.player.hp + item.effect.hp);
+                        if(item.effect.mp) state.player.mp = Math.min(state.player.maxMp, state.player.mp + item.effect.mp);
+                        item.qty--;
+                        if(item.qty <= 0) {
+                            state.player.inventory = state.player.inventory.filter(i => i !== item);
+                        }
+                        game.ui.updateHUD();
+                        game.ui.updateBattleHUD();
+                        game.ui.closeSubMenu();
+                        setTimeout(() => this.enemyTurn(), 1000);
+                    }
+                },
+
+                flee() {
+                    if(Math.random() < 0.5) {
+                        game.ui.showNotification('Berhasil kabur!');
+                        this.end();
+                    } else {
+                        game.ui.showNotification('Gagal kabur!');
+                        setTimeout(() => this.enemyTurn(), 1000);
+                    }
+                },
+
+                enemyTurn() {
+                    const enemy = state.currentEnemy;
+                    const player = state.player;
+                    const damage = Math.max(1, enemy.attack - player.defense);
+                    player.hp -= damage;
+                    game.ui.showDamage(damage, 'player');
+                    game.ui.updateHUD();
+                    game.ui.updateBattleHUD();
+                    
+                    if(player.hp <= 0) {
+                        this.lose();
+                    }
+                },
+
+                win() {
+                    const enemy = state.currentEnemy;
+                    const exp = enemy.exp;
+                    const gold = enemy.gold;
+                    
+                    state.player.exp += exp;
+                    state.player.gold += gold;
+                    
+                    // Check drops
+                    if(enemy.drops) {
+                        for(let drop of enemy.drops) {
+                            if(Math.random() < drop.chance) {
+                                game.giveItem(drop.item, 1);
+                            }
+                        }
+                    }
+                    
+                    // Update quest
+                    state.quests.forEach(q => {
+                        if(q.target.type === 'kill' && q.target.monster === enemy.name.toLowerCase() && !q.completed) {
+                            q.current++;
+                            if(q.current >= q.target.count) {
+                                q.completed = true;
+                                game.ui.showNotification('Quest selesai! Kembali ke NPC.');
+                            }
+                        }
+                    });
+                    
+                    game.ui.showNotification(`Menang! +${exp} EXP, +${gold} Gold`);
+                    game.checkLevelUp();
+                    this.end();
+                },
+
+                lose() {
+                    game.ui.showNotification('Anda kalah! Respawn di kota...');
+                    state.player.hp = state.player.maxHp;
+                    state.currentMap = 'village1';
+                    state.player.x = 12;
+                    state.player.y = 10;
+                    game.generateMap('village1');
+                    this.end();
+                },
+
+                end() {
+                    state.inBattle = false;
+                    state.currentEnemy = null;
+                    document.getElementById('battleScreen').classList.remove('active');
+                    game.ui.updateHUD();
+                }
+            },
+
+            giveItem(itemId, qty) {
+                const existing = state.player.inventory.find(i => i.id === itemId);
+                if(existing) {
+                    existing.qty += qty;
+                } else {
+                    const item = ITEM_DB[itemId];
+                    state.player.inventory.push({ 
+                        id: itemId, 
+                        name: item.name, 
+                        qty: qty, 
+                        type: item.type, 
+                        effect: item.effect,
+                        price: item.price || 10
+                    });
+                }
+            },
+
+            checkLevelUp() {
+                while(state.player.exp >= state.player.maxExp) {
+                    state.player.exp -= state.player.maxExp;
+                    state.player.level++;
+                    state.player.maxHp += 20;
+                    state.player.maxMp += 10;
+                    state.player.hp = state.player.maxHp;
+                    state.player.mp = state.player.maxMp;
+                    state.player.attack += 5;
+                    state.player.defense += 2;
+                    state.player.maxExp = Math.floor(state.player.maxExp * 1.2);
+                    this.ui.showNotification(`Level Up! Level ${state.player.level}`);
+                }
+            },
+
+            acceptQuest(questId) {
+                this.ui.showNotification('Quest diterima!');
+                this.ui.closeDialog();
+            },
+
+            craft(itemId) {
+                const recipe = ITEM_DB[itemId].craft;
+                if(!recipe) return;
+                
+                // Check materials
+                for(let [mat, qty] of Object.entries(recipe)) {
+                    if(mat === 'gold') {
+                        if(state.player.gold < qty) {
+                            this.ui.showNotification('Gold tidak cukup!');
+                            return;
+                        }
+                    } else {
+                        const has = state.player.inventory.find(i => i.id === mat);
+                        if(!has || has.qty < qty) {
+                            this.ui.showNotification(`${ITEM_DB[mat].name} tidak cukup!`);
+                            return;
+                        }
+                    }
+                }
+                
+                // Consume materials
+                for(let [mat, qty] of Object.entries(recipe)) {
+                    if(mat === 'gold') {
+                        state.player.gold -= qty;
+                    } else {
+                        const has = state.player.inventory.find(i => i.id === mat);
+                        has.qty -= qty;
+                        if(has.qty <= 0) {
+                            state.player.inventory = state.player.inventory.filter(i => i.id !== mat);
+                        }
+                    }
+                }
+                
+                this.giveItem(itemId, 1);
+                this.ui.showNotification(`Berhasil craft ${ITEM_DB[itemId].name}!`);
+                this.ui.updateHUD();
+            },
+
+            buy(itemId) {
+                const item = ITEM_DB[itemId];
+                if(state.player.gold < item.price) {
+                    this.ui.showNotification('Gold tidak cukup!');
+                    return;
+                }
+                state.player.gold -= item.price;
+                this.giveItem(itemId, 1);
+                this.ui.showNotification(`Dibeli ${item.name}`);
+                this.ui.updateHUD();
+            },
+
+            sell(item) {
+                state.player.gold += Math.floor(item.price * 0.5);
+                item.qty--;
+                if(item.qty <= 0) {
+                    state.player.inventory = state.player.inventory.filter(i => i !== item);
+                }
+                this.ui.showNotification(`Dijual ${item.name}`);
+                this.ui.updateHUD();
+                this.ui.showShop();
+            },
+
+            save() {
+                const saveData = {
+                    player: state.player,
+                    currentMap: state.currentMap,
+                    quests: state.quests,
+                    flags: state.flags
+                };
+                localStorage.setItem('pixelRPG_save', JSON.stringify(saveData));
+                this.ui.showNotification('Game disimpan!');
+            },
+
+            load() {
+                const saveData = localStorage.getItem('pixelRPG_save');
+                if(saveData) {
+                    const data = JSON.parse(saveData);
+                    state.player = data.player;
+                    state.currentMap = data.currentMap;
+                    state.quests = data.quests;
+                    state.flags = data.flags;
+                    this.generateMap(state.currentMap);
+                    this.ui.updateHUD();
+                    this.ui.showNotification('Game dimuat!');
+                } else {
+                    this.ui.showNotification('Tidak ada save data!');
+                }
+            },
+
+            ui: {
+                updateHUD() {
+                    document.getElementById('hpBar').style.width = (state.player.hp / state.player.maxHp * 100) + '%';
+                    document.getElementById('mpBar').style.width = (state.player.mp / state.player.maxMp * 100) + '%';
+                    document.getElementById('expBar').style.width = (state.player.exp / state.player.maxExp * 100) + '%';
+                    document.getElementById('levelDisplay').textContent = state.player.level;
+                    document.getElementById('goldDisplay').textContent = state.player.gold;
+                    document.getElementById('locationDisplay').textContent = MAPS[state.currentMap].name;
+                },
+
+                updateBattleHUD() {
+                    document.getElementById('battlePlayerLevel').textContent = state.player.level;
+                    document.getElementById('battlePlayerHP').style.width = (state.player.hp / state.player.maxHp * 100) + '%';
+                    if(state.currentEnemy) {
+                        document.getElementById('battleEnemyHP').style.width = (state.currentEnemy.currentHp / state.currentEnemy.hp * 100) + '%';
+                    }
+                },
+
+                showDamage(amount, target) {
+                    const el = document.createElement('div');
+                    el.className = 'damage-popup';
+                    el.textContent = amount;
+                    const sprite = document.getElementById(target === 'enemy' ? 'enemySprite' : 'playerSprite');
+                    sprite.appendChild(el);
+                    setTimeout(() => el.remove(), 1000);
+                },
+
+                showNotification(text) {
+                    const notif = document.getElementById('notification');
+                    notif.textContent = text;
+                    notif.style.display = 'block';
+                    setTimeout(() => notif.style.display = 'none', 2000);
+                },
+
+                showMenu() {
+                    document.getElementById('mainMenu').classList.add('active');
+                },
+
+                closeMenu() {
+                    document.querySelectorAll('.menu-screen').forEach(m => m.classList.remove('active'));
+                },
+
+                closeSubMenu() {
+                    document.querySelectorAll('.menu-screen:not(#mainMenu)').forEach(m => m.classList.remove('active'));
+                },
+
+                showInventory(inBattle = false) {
+                    const list = document.getElementById('inventoryList');
+                    list.innerHTML = '';
+                    
+                    if(state.player.inventory.length === 0) {
+                        list.innerHTML = '<div style="text-align: center; color: #7f8c8d;">Inventory kosong</div>';
+                    } else {
+                        state.player.inventory.forEach(item => {
+                            const div = document.createElement('div');
+                            div.className = 'list-item';
+                            div.innerHTML = `
+                                <div class="item-info">
+                                    <span class="item-name">${ITEM_DB[item.id]?.icon || '📦'} ${item.name} x${item.qty}</span>
+                                    <span class="item-desc">${item.type === 'weapon' ? 'ATK+' + ITEM_DB[item.id].attack : item.type === 'armor' ? 'DEF+' + ITEM_DB[item.id].defense : 'Konsumsi'}</span>
+                                </div>
+                                <span style="color: #f1c40f;">${item.price}G</span>
+                            `;
+                            div.onclick = () => {
+                                if(inBattle && item.type === 'consumable') {
+                                    game.battle.useItemInBattle(item);
+                                } else if(item.type === 'consumable') {
+                                    if(item.effect.hp) state.player.hp = Math.min(state.player.maxHp, state.player.hp + item.effect.hp);
+                                    if(item.effect.mp) state.player.mp = Math.min(state.player.maxMp, state.player.mp + item.effect.mp);
+                                    item.qty--;
+                                    if(item.qty <= 0) {
+                                        state.player.inventory = state.player.inventory.filter(i => i !== item);
+                                    }
+                                    game.ui.updateHUD();
+                                    game.ui.showNotification(`Menggunakan ${item.name}`);
+                                    this.showInventory();
+                                }
+                            };
+                            list.appendChild(div);
+                        });
+                    }
+                    
+                    document.getElementById('inventoryMenu').classList.add('active');
+                },
+
+                showCrafting() {
+                    const list = document.getElementById('craftingList');
+                    list.innerHTML = '';
+                    
+                    Object.entries(ITEM_DB).forEach(([id, item]) => {
+                        if(item.craft) {
+                            const div = document.createElement('div');
+                            div.className = 'list-item';
+                            let req = [];
+                            for(let [mat, qty] of Object.entries(item.craft)) {
+                                req.push(`${mat === 'gold' ? '💰' : ITEM_DB[mat]?.icon || '📦'}${qty}`);
+                            }
+                            div.innerHTML = `
+                                <div class="item-info">
+                                    <span class="item-name">${item.icon} ${item.name}</span>
+                                    <span class="item-desc">Butuh: ${req.join(', ')}</span>
+                                </div>
+                                <button class="battle-btn" style="padding: 5px 10px; font-size: 12px;">Craft</button>
+                            `;
+                            div.querySelector('button').onclick = () => game.craft(id);
+                            list.appendChild(div);
+                        }
+                    });
+                    
+                    document.getElementById('craftingMenu').classList.add('active');
+                },
+
+                showQuests() {
+                    const list = document.getElementById('questList');
+                    list.innerHTML = '';
+                    
+                    state.quests.forEach(q => {
+                        const div = document.createElement('div');
+                        div.className = 'list-item';
+                        div.innerHTML = `
+                            <div class="item-info">
+                                <span class="item-name">${q.completed ? '✅' : '📜'} ${q.name}</span>
+                                <span class="item-desc">${q.desc}</span>
+                                <span class="item-desc" style="color: ${q.completed ? '#2ecc71' : '#f39c12'};">
+                                    ${q.completed ? 'Selesai!' : `Progres: ${q.current}/${q.target.count}`}
+                                </span>
+                            </div>
+                            <span style="color: #f1c40f; font-size: 12px;">${q.reward.gold}G<br>${q.reward.exp}EXP</span>
+                        `;
+                        list.appendChild(div);
+                    });
+                    
+                    document.getElementById('questMenu').classList.add('active');
+                },
+
+                showMap() {
+                    const list = document.getElementById('mapList');
+                    list.innerHTML = '';
+                    
+                    Object.entries(MAPS).forEach(([id, map]) => {
+                        const div = document.createElement('div');
+                        div.className = 'list-item';
+                        const isCurrent = id === state.currentMap;
+                        div.innerHTML = `
+                            <div class="item-info">
+                                <span class="item-name">${isCurrent ? '📍' : '🗺️'} ${map.name}</span>
+                                <span class="item-desc">${map.type === 'safe' ? '🏠 Kota Aman' : map.type === 'wild' ? '⚔️ Area Berbahaya' : '💀 Dungeon'}</span>
+                            </div>
+                            ${isCurrent ? '<span style="color: #2ecc71;">Di sini</span>' : ''}
+                        `;
+                        list.appendChild(div);
+                    });
+                    
+                    document.getElementById('mapMenu').classList.add('active');
+                },
+
+                showShop(special = null) {
+                    const list = document.getElementById('shopList');
+                    list.innerHTML = '';
+                    
+                    // Buy tab
+                    Object.entries(ITEM_DB).forEach(([id, item]) => {
+                        if(special === 'weapon' && item.type !== 'weapon') return;
+                        if(item.price) {
+                            const div = document.createElement('div');
+                            div.className = 'list-item';
+                            div.innerHTML = `
+                                <div class="item-info">
+                                    <span class="item-name">${item.icon} ${item.name}</span>
+                                    <span class="item-desc">${item.type === 'weapon' ? 'ATK+' + item.attack : item.type === 'armor' ? 'DEF+' + item.defense : 'Konsumsi'}</span>
+                                </div>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <span style="color: #f1c40f;">${item.price}G</span>
+                                    <button class="battle-btn" style="padding: 5px 10px; font-size: 12px;">Beli</button>
+                                </div>
+                            `;
+                            div.querySelector('button').onclick = () => game.buy(id);
+                            list.appendChild(div);
+                        }
+                    });
+                    
+                    document.getElementById('shopMenu').classList.add('active');
+                },
+
+                switchShopTab(tab) {
+                    const list = document.getElementById('shopList');
+                    list.innerHTML = '';
+                    
+                    if(tab === 'buy') {
+                        this.showShop();
+                    } else {
+                        // Sell tab
+                        if(state.player.inventory.length === 0) {
+                            list.innerHTML = '<div style="text-align: center; color: #7f8c8d;">Tidak ada item untuk dijual</div>';
+                        } else {
+                            state.player.inventory.forEach(item => {
+                                const div = document.createElement('div');
+                                div.className = 'list-item';
+                                div.innerHTML = `
+                                    <div class="item-info">
+                                        <span class="item-name">${ITEM_DB[item.id]?.icon || '📦'} ${item.name} x${item.qty}</span>
+                                        <span class="item-desc">Jual: ${Math.floor(item.price * 0.5)}G</span>
+                                    </div>
+                                    <button class="battle-btn" style="padding: 5px 10px; font-size: 12px;">Jual</button>
+                                `;
+                                div.querySelector('button').onclick = () => game.sell(item);
+                                list.appendChild(div);
+                            });
+                        }
+                    }
+                },
+
+                showDialog(speaker, text, options) {
+                    document.getElementById('dialogSpeaker').textContent = speaker;
+                    document.getElementById('dialogText').textContent = text;
+                    const optsDiv = document.getElementById('dialogOptions');
+                    optsDiv.innerHTML = '';
+                    options.forEach(opt => {
+                        const btn = document.createElement('div');
+                        btn.className = 'dialog-option';
+                        btn.textContent = opt.text;
+                        btn.onclick = opt.action;
+                        optsDiv.appendChild(btn);
+                    });
+                    document.getElementById('dialogBox').classList.add('active');
+                },
+
+                closeDialog() {
+                    document.getElementById('dialogBox').classList.remove('active');
+                }
+            },
+
+            render() {
+                const map = state.maps[state.currentMap];
+                if(!map) return;
+
+                const tileW = canvas.width / CONFIG.MAP_WIDTH;
+                const tileH = canvas.height / CONFIG.MAP_HEIGHT;
+                const scale = Math.min(tileW, tileH);
+
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const offsetX = (canvas.width - map[0].length * scale) / 2;
+                const offsetY = (canvas.height - map.length * scale) / 2;
+
+                // Draw map
+                for(let y = 0; y < map.length; y++) {
+                    for(let x = 0; x < map[y].length; x++) {
+                        const tile = map[y][x];
+                        ctx.fillStyle = CONFIG.COLORS[tile] || '#000';
+                        ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+                        
+                        // Add texture
+                        if(tile === 'grass' && Math.random() < 0.1) {
+                            ctx.fillStyle = '#3d6b26';
+                            ctx.fillRect(offsetX + x * scale + scale*0.2, offsetY + y * scale + scale*0.2, scale*0.2, scale*0.2);
+                        }
+                    }
+                }
+
+                // Draw items
+                state.items.forEach(item => {
+                    const itemData = ITEM_DB[item.type];
+                    ctx.font = `${scale * 0.6}px serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(itemData.icon, offsetX + item.x * scale + scale/2, offsetY + item.y * scale + scale/2);
+                });
+
+                // Draw NPCs
+                state.npcs.forEach(npc => {
+                    ctx.font = `${scale * 0.8}px serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(npc.icon, offsetX + npc.x * scale + scale/2, offsetY + npc.y * scale + scale/2);
+                });
+
+                // Draw monsters
+                state.monsters.forEach(m => {
+                    const monster = MONSTER_DB[m.type];
+                    ctx.font = `${scale * 0.8}px serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(monster.icon, offsetX + m.x * scale + scale/2, offsetY + m.y * scale + scale/2);
+                });
+
+                // Draw player
+                ctx.font = `${scale * 0.8}px serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🧙', offsetX + state.player.x * scale + scale/2, offsetY + state.player.y * scale + scale/2);
+
+                // Draw lighting effect
+                const gradient = ctx.createRadialGradient(
+                    offsetX + state.player.x * scale + scale/2,
+                    offsetY + state.player.y * scale + scale/2,
+                    scale * 2,
+                    offsetX + state.player.x * scale + scale/2,
+                    offsetY + state.player.y * scale + scale/2,
+                    scale * 8
+                );
+                gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                gradient.addColorStop(1, 'rgba(0,0,0,0.5)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            },
+
+            loop() {
+                // Handle input
+                if(input.up) this.move(0, -1);
+                if(input.down) this.move(0, 1);
+                if(input.left) this.move(-1, 0);
+                if(input.right) this.move(1, 0);
+
+                // Render
+                this.render();
+
+                requestAnimationFrame(() => this.loop());
+            }
+        };
+
+        // Start game
+        game.init();
+    </script>
+</body>
+</html>
